@@ -8,11 +8,29 @@
 # Usage: ./demo.sh <command> [prebaked|live]     (target defaults to prebaked)
 set -uo pipefail
 
-PSQL="${PSQL:-/opt/homebrew/opt/libpq/bin/psql}"
-HOST="${HOST:-aws-0-us-east-1.pooler.supabase.com}"
-PORT="${PORT:-5432}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SECRETS="$HERE/secrets"
+# Load .env (copied from .env.example) so SB_REF_*, EC2_HOST, etc. are available.
+# Only fills in variables that are not already set, so inline overrides such as
+# `M_FAULT=8 ./demo.sh fault-start` still win. Strips `# comments`; values must not contain '#'.
+load_env() {
+  [ -f "$1" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"; line="${line%"${line##*[![:space:]]}"}"
+    [ -z "$line" ] && continue
+    key="${line%%=*}"; val="${line#*=}"
+    case "$key" in ''|[0-9]*|*[!A-Za-z0-9_]*) continue ;; esac
+    eval "[ -z \"\${$key+x}\" ]" && export "$key=$val"
+  done < "$1"
+}
+load_env "$HERE/.env"
+
+# psql: Homebrew libpq on macOS, otherwise whatever is on PATH.
+PSQL="${PSQL:-$([ -x /opt/homebrew/opt/libpq/bin/psql ] && echo /opt/homebrew/opt/libpq/bin/psql || echo psql)}"
+HOST="${HOST:-${PGHOST:-aws-0-us-east-1.pooler.supabase.com}}"
+PORT="${PORT:-${PGPORT:-5432}}"
+SECRETS="${SECRETS_DIR:-$HERE/secrets}"
+case "$SECRETS" in /*) ;; *) SECRETS="$HERE/${SECRETS#./}" ;; esac
 RUNDIR="$HERE/run"; mkdir -p "$RUNDIR"
 
 # project refs resolved per-target below (case), for bash 3.2 compatibility

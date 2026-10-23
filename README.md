@@ -18,12 +18,19 @@ resettable from the Supabase dashboard if lost.
 ## Setup
 
 1. `cp .env.example .env` and fill in your own values — project refs, EC2 host, and
-   Grafana Cloud push credentials. Nothing is shared; the repo ships no credentials.
+   Grafana Cloud push credentials. `demo.sh` and `deploy.sh` read `.env` automatically
+   (anything already exported in your shell wins). Nothing is shared; the repo ships no
+   credentials.
 2. Create `secrets/` and add your DB passwords (`pw_prebaked`, `pw_live`) and your EC2
    key (`ec2_key.pem`), all `chmod 600`. The whole directory is gitignored.
-3. Seed the database: see **Schema + seed** below.
-4. Deploy the app to your EC2 host with `./deploy.sh`, which runs `app/deploy/bootstrap.sh`.
+3. Seed the database: see **Rebuild schema from scratch** below.
+4. Launch an EC2 host (Amazon Linux 2023, t3.micro is enough) with ports 22 open to you,
+   then `./deploy.sh`. It ships the app, the project ref + DB password for `SB_TARGET`, and
+   the Grafana Cloud push credentials, then runs `app/deploy/bootstrap.sh` on the host to
+   install Node + Alloy and start the `demoapp`, `fixd`, and `alloy` services.
+   `./deploy.sh --dry-run` shows exactly what would be copied.
 5. Connect the project to Grafana Cloud from the Supabase dashboard (**Connect to Grafana**).
+6. Import `app-dashboard.json` into your stack for the app-side panels.
 
 Required tooling: `psql` (libpq), Node 18+, an SSH key for the EC2 host, and a Grafana
 Cloud stack.
@@ -37,9 +44,10 @@ Direct DB host is IPv6-only (won't resolve on the demo laptop). Use the **pooler
 ## The scenario: resource cascade
 
 Dataset: `shop` schema (customers 20k, products 2k, orders 500k, order_items 1.25M, events; ~207 MB).
-`orders.status` is **intentionally un-indexed**. A reporting query filtering on `status`
-(joined to order_items) forces full seq scans; run under concurrency on the nano instance it
-saturates CPU/IO → query latency climbs → connections pile up. **Remediation = add the index.**
+`order_items.batch` is **intentionally un-indexed**. The `/report` query filters on `batch`
+(selective, ~1/1000 rows) and forces a full 1.25M-row seq scan; run under concurrency on the nano
+instance it saturates CPU/IO → query latency climbs → connections pile up.
+**Remediation = `create index on shop.order_items(batch)`.**
 
 **Validated 2026-07-23:** solo fault query ~0.35 s → ~4.5 s under 12 workers (~14×), active
 connections 1→14. The Supabase **pooler session pool caps at 15 connections**, so defaults are
@@ -79,15 +87,12 @@ sum by (route) (count_over_time({job="demoapp", level="error"}[5m]))
 {job="demoapp"} | json | pg_code = "57014"                  # statement timeouts specifically
 ```
 
-**Three new variables are required in `secrets/grafana_cloud_push.env`.** `bootstrap.sh` now fails
-loudly if any are missing, because `envsubst` would otherwise render a config that starts fine and
-silently pushes nothing:
-
-```
-GCLOUD_LOKI_URL=https://logs-prod-<region>.grafana.net/loki/api/v1/push
-GCLOUD_LOKI_USER=<stack instance id>
-GCLOUD_LOKI_PASS=<cloud access policy token>
-```
+**Loki push credentials are required alongside the Prometheus ones.** Set them in `.env`
+(`GCLOUD_LOKI_URL`, `GCLOUD_LOKI_USER`, `GCLOUD_LOKI_PASS`) — or, if you prefer to keep them
+out of `.env`, in `secrets/grafana_cloud_push.env` with all six `GCLOUD_*` values; `deploy.sh`
+uses that file when it exists. Both `deploy.sh` and `bootstrap.sh` fail loudly if any are
+missing, because `envsubst` would otherwise render a config that starts fine and silently
+pushes nothing.
 
 Two host-level gotchas, both handled in `bootstrap.sh` but worth knowing if you debug by hand:
 
@@ -106,7 +111,7 @@ The Alloy config has **not** been syntax-validated — no `alloy` binary on the 
 ./demo.sh baseline       [prebaked|live]   # steady background load
 ./demo.sh fault-start    [prebaked|live]   # trigger the cascade
 ./demo.sh fault-stop     [prebaked|live]
-./demo.sh remediate      [prebaked|live]   # add index on orders(status) -> recovery
+./demo.sh remediate      [prebaked|live]   # add index on order_items(batch) -> recovery
 ./demo.sh unremediate    [prebaked|live]   # drop it again (restore fault hook)
 ./demo.sh reset          [prebaked|live]   # stop workers, truncate events, drop index
 ```

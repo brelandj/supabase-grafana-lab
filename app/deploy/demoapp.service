@@ -7,8 +7,9 @@ Wants=network-online.target
 WorkingDirectory=/opt/demoapp
 Environment=PORT=8080
 Environment=SECRETS_DIR=/opt/demoapp/secrets
-Environment=SB_TARGET=prebaked
 Environment=PG_POOL_MAX=12
+# SB_REF, SB_TARGET, PGHOST/PGPORT and any tuning overrides; written by deploy.sh.
+EnvironmentFile=/opt/demoapp/app.env
 ExecStart=/usr/bin/node /opt/demoapp/server.js
 Restart=always
 RestartSec=2

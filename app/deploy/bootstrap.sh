@@ -4,6 +4,15 @@
 set -euo pipefail
 APPDIR=/opt/demoapp
 
+echo "== preflight =="
+# deploy.sh puts these in place. Without them the services start, throw on a missing
+# SB_REF / password file, and crash-loop — check up front so the failure is legible.
+[[ -f "$APPDIR/app.env" ]] || { echo "ERROR: $APPDIR/app.env missing (run deploy.sh from the repo)" >&2; exit 1; }
+grep -q '^SB_REF=.' "$APPDIR/app.env" || { echo "ERROR: SB_REF not set in $APPDIR/app.env" >&2; exit 1; }
+SB_TARGET="$(sed -n 's/^SB_TARGET=//p' "$APPDIR/app.env")"; SB_TARGET="${SB_TARGET:-prebaked}"
+[[ -s "$APPDIR/secrets/pw_$SB_TARGET" ]] || { echo "ERROR: $APPDIR/secrets/pw_$SB_TARGET missing or empty" >&2; exit 1; }
+[[ -f "$APPDIR/grafana_cloud_push.env" ]] || { echo "ERROR: $APPDIR/grafana_cloud_push.env missing" >&2; exit 1; }
+
 echo "== packages =="
 sudo dnf install -y nodejs npm gettext >/dev/null
 
@@ -33,14 +42,17 @@ sudo chmod 640 /etc/alloy/config.alloy
 sudo usermod -a -G systemd-journal alloy
 
 echo "== services =="
-sudo cp "$APPDIR/deploy/demoapp.service" "$APPDIR/deploy/loadgen.service" /etc/systemd/system/
+sudo cp "$APPDIR/deploy/demoapp.service" "$APPDIR/deploy/fixd.service" \
+        "$APPDIR/deploy/loadgen.service" /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable demoapp.service
+sudo systemctl enable demoapp.service fixd.service
 # `enable --now` starts a unit only if it is stopped, so on a host that is already
 # running it leaves the old process serving the previous code indefinitely — the new
 # server.js sits on disk, inert, and the deploy looks like it succeeded. Restart
 # explicitly so shipping an app change actually ships it.
 sudo systemctl restart demoapp.service
+# fixd must hold its connection BEFORE any fault starts (see fixd.js); bring it up now.
+sudo systemctl restart fixd.service
 
 # loadgen drives continuous traffic against Supabase and Grafana Cloud, so a deploy must
 # not silently resurrect it once it has been deliberately turned off. Preserve whatever
@@ -59,7 +71,7 @@ sudo systemctl restart alloy
 sleep 3
 sleep 2
 echo "== status =="
-systemctl is-active demoapp.service loadgen.service alloy || true
+systemctl is-active demoapp.service fixd.service loadgen.service alloy || true
 curl -s localhost:8080/healthz && echo
 echo "== routes =="
 # Proves the running process is the code we just copied, rather than a stale one.

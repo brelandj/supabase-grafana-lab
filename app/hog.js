@@ -11,7 +11,9 @@ const REF = process.env.SB_REF;
 if (!REF) {
   throw new Error('SB_REF is required: your Supabase project ref. See .env.example');
 }
-const PW = fs.readFileSync(`${process.env.SECRETS_DIR || '/opt/demoapp/secrets'}/pw_prebaked`, 'utf8').trim();
+const TARGET = process.env.SB_TARGET || 'prebaked';
+const PW = (process.env.SB_PW
+  || fs.readFileSync(`${process.env.SECRETS_DIR || '/opt/demoapp/secrets'}/pw_${TARGET}`, 'utf8')).trim();
 
 const held = [];
 let refused = 0;
@@ -19,8 +21,8 @@ let refused = 0;
 (async () => {
   await Promise.all(Array.from({ length: N }, async () => {
     const c = new Client({
-      host: 'aws-0-us-east-1.pooler.supabase.com',
-      port: 5432,
+      host: process.env.PGHOST || 'aws-0-us-east-1.pooler.supabase.com',
+      port: Number(process.env.PGPORT || 5432),
       user: `postgres.${REF}`,
       password: PW,
       database: 'postgres',

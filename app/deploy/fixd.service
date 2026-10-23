@@ -7,7 +7,8 @@ Wants=network-online.target
 WorkingDirectory=/opt/demoapp
 Environment=FIXD_PORT=8081
 Environment=SECRETS_DIR=/opt/demoapp/secrets
-Environment=SB_TARGET=prebaked
+# SB_REF, SB_TARGET, PGHOST/PGPORT; written by deploy.sh.
+EnvironmentFile=/opt/demoapp/app.env
 ExecStart=/usr/bin/node /opt/demoapp/fixd.js
 Restart=always
 RestartSec=2
