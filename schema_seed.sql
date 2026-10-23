@@ -1,4 +1,4 @@
--- Demo schema + seed for the Supabase↔Grafana enablement demo.
+-- Schema + seed for the Supabase↔Grafana hands-on lab.
 -- Scenario hook: an e-commerce-ish dataset where a reporting query filters
 -- order_items.batch, which is DELIBERATELY left un-indexed. Running that query under
 -- concurrency forces full seq scans -> CPU/IO saturation -> query latency ->

@@ -1,7 +1,10 @@
-# Run-of-show panel map — "Supabase Project" dashboard
+# Panel map — "Supabase Project" dashboard (for LAB.md Part 3b)
 
 Stack: `https://<your-stack>.grafana.net` · Dashboard uid: whatever the 1-click integration provisions in your stack
 Vars: `$job`, `$project` = `supabase_project_ref` (your project ref), `$supabase_identifier`.
+
+Panel ids are from the integration dashboard at the time of writing; they can shift between
+integration versions, so match on panel *title* if an id is missing.
 
 ## The cascade, in the order to click through
 
@@ -26,7 +29,7 @@ Vars: `$job`, `$project` = `supabase_project_ref` (your project ref), `$supabase
 
 **5. Health / context (stay green — "up but struggling")**
 - `[319] Postgres status` (`pg_up`), `[341] pgbouncer status` (`pgbouncer_up`), `[324] DB Mode` (ReadWrite), `[325] In Recovery` (No), `[307] OOM Killer` (flat — CPU-bound, not memory).
-- `[321] Database size` (`pg_database_size_mb`) — ~207 MB confirms it's the prebaked project.
+- `[321] Database size` (`pg_database_size_mb`) — ~207 MB confirms the seeded dataset is in place.
 
 ## Remediation beat
 `./demo.sh remediate prebaked` → `create index on shop.order_items(batch)`. Then watch `[77] CPU Basic` drop, `[323] Client connections` drain, `[330] Query stats` total-time fall. Story closes.

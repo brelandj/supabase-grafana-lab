@@ -1,19 +1,24 @@
-# Supabase ↔ Grafana enablement demo
+# Supabase ↔ Grafana hands-on lab
 
-Live demo kit for showing how the Grafana Cloud integration troubleshoots a Supabase
-project problem that native Supabase dashboards struggle with.
+A hands-on lab for troubleshooting a Supabase project end to end with Grafana Cloud. You
+connect a Supabase project to Grafana with the one-click integration, run a small app
+against it, break the database with a realistic missing-index fault, and then follow the
+incident from the alert → application metrics → database metrics → logs → root cause → fix.
 
-## Projects (Supabase, Free tier, us-east-1)
+Start with **[LAB.md](LAB.md)** once the setup below is done.
 
-| Name | Ref | Role |
-|------|-----|------|
-| `grafana-demo-prebaked` | `$SB_REF_PREBAKED` | Connect to Grafana **ahead of the session**; run the fault here so there's history |
-| `grafana-demo-live` | `$SB_REF_LIVE` | Connect **live** to show the 1-click flow |
+## Supabase projects (Free tier, us-east-1)
 
-Create both projects in your own Supabase org. Free tier is enough to run this, but note
-Free allows only **2 active projects per org** (paused projects don't count). Put each project's
-DB password in `secrets/pw_prebaked` / `secrets/pw_live` (gitignored, chmod 600) — they're
-resettable from the Supabase dashboard if lost.
+The scripts address projects by a *target* name, `prebaked` or `live`:
+
+| Target | Env var | Use |
+|--------|---------|-----|
+| `prebaked` | `$SB_REF_PREBAKED` | The project you work through the lab on. Connect it to Grafana early so it has history. |
+| `live` | `$SB_REF_LIVE` | Optional second project, e.g. to repeat the **Connect to Grafana** step on a fresh project. |
+
+One project is enough for the lab. Free tier allows **2 active projects per org** (paused
+projects don't count). Put each project's DB password in `secrets/pw_prebaked` /
+`secrets/pw_live` (gitignored, chmod 600) — they're resettable from the Supabase dashboard if lost.
 
 ## Setup
 
@@ -37,7 +42,7 @@ Cloud stack.
 
 ## Connectivity
 
-Direct DB host is IPv6-only (won't resolve on the demo laptop). Use the **pooler**:
+The direct DB host is IPv6-only and won't resolve from many laptops. Use the **pooler**:
 `aws-0-us-east-1.pooler.supabase.com:5432`, user `postgres.<ref>`, db `postgres`.
 `psql` via libpq: `/opt/homebrew/opt/libpq/bin/psql`.
 
@@ -54,14 +59,15 @@ connections 1→14. The Supabase **pooler session pool caps at 15 connections**,
 `M_FAULT=12` / `N_BASELINE=2` (keep `N_BASELINE + M_FAULT + 1 ≤ 15`; higher counts trigger
 `EMAXCONNSESSION`).
 
-Why it favors Grafana over native Supabase dashboards: cross-signal correlation on one timeline,
-long retention, and alerting — all weak spots of the built-in siloed widgets.
+What the lab exercises: the Supabase integration dashboard for database metrics, a small app
+dashboard for the user-facing symptoms, Loki for the request logs, and an alert — all on one
+timeline, so you can walk the incident from symptom to root cause.
 
 ## Logs → Loki
 
 Gives the cascade a second signal on the same timeline, so you can walk from metrics into logs
-without leaving the dashboard — useful for live demos and for any agent that has to pivot from
-metrics to logs during an incident.
+without leaving the dashboard — the pivot you make in LAB.md once the metrics tell you *where*
+the problem is but not *what* it is.
 
 `app/server.js` writes one JSON line per interesting request to stdout; systemd captures it and Alloy
 ships the journal to Loki. Volume is deliberately controlled: baseline load runs ~60 rps, so healthy
@@ -108,12 +114,12 @@ rendered copy before deploying.
 ## Control script
 
 ```bash
-# The demo path: fault driven THROUGH the app on EC2 (what RUNOFSHOW.md uses)
+# The lab path: fault driven THROUGH the app on EC2 (what LAB.md uses)
 ./demo.sh fixd-start                        # arm: hold the connection the fix will need
-./demo.sh app-fault-start                   # trigger the cascade (~5 min before you present)
+./demo.sh app-fault-start                   # trigger the cascade
 ./demo.sh remediate      [prebaked|live]    # THE FIX: add index on order_items(batch) -> recovery
 ./demo.sh app-fault-stop
-./demo.sh unremediate    [prebaked|live]    # drop the index again (re-arm for another run)
+./demo.sh unremediate    [prebaked|live]    # drop the index again (reset for another run)
 ./demo.sh status         [prebaked|live]    # connections + indexes + EXPLAIN of the fault query
 
 # Direct-to-DB workers from your laptop (bypass the app; handy for testing the schema)
@@ -129,15 +135,16 @@ PGPASSWORD="$(cat secrets/pw_prebaked)" /opt/homebrew/opt/libpq/bin/psql \
   -v ON_ERROR_STOP=1 -f schema_seed.sql
 ```
 
-## Pre-session checklist
+## Ready-to-start checklist
 
-Work through these in order, ideally a day or two ahead so the prebaked project has history:
+Before opening LAB.md, confirm:
 
-- [ ] Both Supabase projects created; `.env` and `secrets/` filled in (see **Setup**).
-- [ ] Schema seeded on the prebaked project (`./demo.sh status` shows a `Seq Scan` plan and no `idx_oi_batch`).
+- [ ] Supabase project created; `.env` and `secrets/` filled in (see **Setup**).
+- [ ] Schema seeded (`./demo.sh status` shows a `Seq Scan` plan and no `idx_oi_batch`).
 - [ ] EC2 host deployed (`./deploy.sh`); `demoapp`, `fixd`, `alloy` all `active`; `{job="demoapp"}` returns logs in Explore.
-- [ ] Prebaked project connected to your Grafana stack via **Connect to Grafana**; the Supabase integration dashboard shows CPU / connections for it.
+- [ ] Project connected to your Grafana stack via **Connect to Grafana**; the Supabase integration dashboard shows CPU / connections for it.
 - [ ] `app-dashboard.json` imported; the four app panels show the baseline load.
-- [ ] Alert created on CPU busy ≥ 85% (see RUNOFSHOW.md); fire it once with a rehearsal fault so you know the lead time on your instance.
-- [ ] Panel map in PANELS.md checked against what the integration actually provisioned in your stack (panel ids can shift between integration versions).
-- [ ] One full rehearsal of RUNOFSHOW.md, then `unremediate` + `app-fault-stop` and let the burstable instances recover CPU credits before the real run.
+- [ ] Nothing heavy has run against the project or the EC2 host in the last ~30 minutes (both are burstable; low CPU credits make the baseline look erratic).
+
+If you are running this for a group, give the connected project an hour or more of baseline
+traffic beforehand so the dashboards have history to compare the incident against.

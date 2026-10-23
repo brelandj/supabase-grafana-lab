@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Control script for the Supabase <-> Grafana enablement demo.
+# Control script for the Supabase <-> Grafana hands-on lab.
 # Drives baseline load and the "resource cascade" fault against a demo project.
 #
 # Connectivity: Supabase direct DB host is IPv6-only; we use the pooler.
@@ -52,9 +52,9 @@ APP_FAULT_CONC="${APP_FAULT_CONC:-20}"
 APP_FAULT_RATE="${APP_FAULT_RATE:-30}"
 APP_BASELINE_RATE="${APP_BASELINE_RATE:-20}"
 
-# The app serves each endpoint under two names: /report + /order (the default scripted
-# into the run of show), plus /recommendations + /play as aliases if you want to re-skin
-# the demo for a different narrative. The Prometheus `route` label follows whichever path
+# The app serves each endpoint under two names: /report + /order (what LAB.md uses),
+# plus /recommendations + /play as aliases if you want to re-skin the scenario for a
+# different narrative. The Prometheus `route` label follows whichever path
 # is requested, so driving load at the aliases is enough to re-theme the dashboards
 # without redeploying:
 #   FAULT_PATHS=/recommendations BASELINE_PATHS=/play ./demo.sh app-fault-start
@@ -67,7 +67,7 @@ usage() {
 Usage: $0 <command> [prebaked|live]   (target defaults to prebaked)
 
   status           connections snapshot + order_items indexes + EXPLAIN of the fault query
-  app-fault-start  START THE DEMO FAULT: app-driven load on EC2 (loadgen CONC=$APP_FAULT_CONC -> $FAULT_PATHS)
+  app-fault-start  START THE FAULT: app-driven load on EC2 (loadgen RATE=$APP_FAULT_RATE req/s -> $FAULT_PATHS)
   app-fault-stop   stop the app-driven fault on EC2
   app-baseline-start  themed baseline load -> $BASELINE_PATHS (leaves loadgen.service alone)
   app-baseline-stop   stop the themed baseline
@@ -77,7 +77,7 @@ Usage: $0 <command> [prebaked|live]   (target defaults to prebaked)
   unremediate      drop that index (restore the fault hook, for a re-run)
   baseline         start $N_BASELINE local direct-DB steady workers (EC2 baseline already runs; rarely needed)
   baseline-stop    stop local baseline workers
-  fault-start      start $M_FAULT local direct-DB fault workers (bypasses the app; use app-fault-start for the demo)
+  fault-start      start $M_FAULT local direct-DB fault workers (bypasses the app; use app-fault-start for the lab)
   fault-stop       stop local direct-DB fault workers
   reset            stop local workers, truncate events, drop the batch index (clean baseline)
 
@@ -174,7 +174,7 @@ case "$cmd" in
     # because nothing frees a slot while the fault runs.
     if [ "$target" = "prebaked" ]; then
       # The HTTP response is buffered until CREATE INDEX returns, which takes ~30s while
-      # the DB is pinned at 100% CPU. Without this line the terminal looks hung on camera.
+      # the DB is pinned at 100% CPU. Without this line the terminal looks hung.
       echo "[$target] applying fix: CREATE INDEX on shop.order_items(batch)"
       echo "          (~30s - the build is competing with the saturated DB)"
       out=$(ssh_box 'curl -s -S --max-time 240 localhost:8081/fix' 2>&1)

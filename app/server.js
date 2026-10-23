@@ -1,8 +1,8 @@
-// Demo app for the Supabase <-> Grafana enablement demo.
+// Demo app for the Supabase <-> Grafana hands-on lab.
 // Exposes Prometheus metrics at /metrics. The /report endpoint (aliased as
 // /recommendations) runs the intentionally un-indexed query, so ramping traffic to it
 // drives the DB resource cascade *through the app* — app latency/errors and the Supabase
-// DB panels move together, which is the whole-stack story Supabase can't show.
+// DB panels move together on one timeline, which is what the lab walks through.
 const fs = require('fs');
 const express = require('express');
 const client = require('prom-client');
@@ -115,8 +115,8 @@ app.use((req, res, next) => {
 const REPORT_SQL = `select count(*) as n, coalesce(sum(qty*price),0) as revenue
   from shop.order_items where batch = $1`;
 
-// Two names for each endpoint, one handler behind them. The run of show is scripted
-// against /report and /order — it quotes per-route latency and throughput numbers — but
+// Two names for each endpoint, one handler behind them. LAB.md is written against
+// /report and /order — it quotes per-route latency and throughput numbers — but
 // /recommendations and /play are kept as aliases so you can re-skin the demo for a
 // different narrative without a second deployment. The metrics `route` label comes from
 // req.path, so each alias produces its own series and the dashboards still line up.
@@ -130,8 +130,8 @@ const HEALTHY_PATHS = ['/order', '/play'];
 // name. Routes listed here get a tighter per-transaction timeout so the query is
 // genuinely cancelled and pg returns 57014.
 //
-// Applied per-path rather than globally on purpose: /report keeps the 3s ceiling the
-// run of show quotes, while /recommendations gets the tighter timeout so it fails
+// Applied per-path rather than globally on purpose: /report keeps the 3s ceiling LAB.md
+// quotes, while /recommendations gets the tighter timeout so it fails
 // deterministically if you want a cleaner error-rate story. Pool contention is
 // unchanged either way, so the blast-radius story on the healthy route survives.
 const TIGHT_TIMEOUT_MS = Number(process.env.TIGHT_TIMEOUT_MS || 1200);
