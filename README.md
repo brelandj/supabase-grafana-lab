@@ -152,3 +152,7 @@ Before opening LAB.md, confirm:
 
 If you are running this for a group, give the connected project an hour or more of baseline
 traffic beforehand so the dashboards have history to compare the incident against.
+
+## License
+
+Copyright 2026 Grafana Labs. Licensed under the [Apache License, Version 2.0](LICENSE).

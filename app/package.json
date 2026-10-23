@@ -2,6 +2,7 @@
   "name": "supabase-grafana-demo-app",
   "version": "1.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
