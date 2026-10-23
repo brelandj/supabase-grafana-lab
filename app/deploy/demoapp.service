@@ -1,0 +1,18 @@
+[Unit]
+Description=Supabase Grafana demo app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/demoapp
+Environment=PORT=8080
+Environment=SECRETS_DIR=/opt/demoapp/secrets
+Environment=SB_TARGET=prebaked
+Environment=PG_POOL_MAX=12
+ExecStart=/usr/bin/node /opt/demoapp/server.js
+Restart=always
+RestartSec=2
+User=ec2-user
+
+[Install]
+WantedBy=multi-user.target

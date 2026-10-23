@@ -1,0 +1,19 @@
+[Unit]
+Description=Supabase Grafana demo baseline load (healthy traffic)
+After=demoapp.service
+Wants=demoapp.service
+
+[Service]
+WorkingDirectory=/opt/demoapp
+Environment=APP_URL=http://localhost:8080
+# Fixed rate, not CONC workers: a closed loop would accelerate to ~600 rps the moment the
+# fix lands and keep DB CPU pegged, hiding the recovery. See the header in loadgen.js.
+Environment=RATE=20
+Environment=PATHS=/order
+ExecStart=/usr/bin/node /opt/demoapp/loadgen.js
+Restart=always
+RestartSec=2
+User=ec2-user
+
+[Install]
+WantedBy=multi-user.target

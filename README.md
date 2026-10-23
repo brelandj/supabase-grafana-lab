@@ -1,0 +1,130 @@
+# Supabase ↔ Grafana enablement demo
+
+Live demo kit for showing how the Grafana Cloud integration troubleshoots a Supabase
+project problem that native Supabase dashboards struggle with.
+
+## Projects (Supabase, Free tier, us-east-1)
+
+| Name | Ref | Role |
+|------|-----|------|
+| `grafana-demo-prebaked` | `$SB_REF_PREBAKED` | Connect to Grafana **ahead of the session**; run the fault here so there's history |
+| `grafana-demo-live` | `$SB_REF_LIVE` | Connect **live** to show the 1-click flow |
+
+Create both projects in your own Supabase org. Free tier is enough to run this, but note
+Free allows only **2 active projects per org** (paused projects don't count). Put each project's
+DB password in `secrets/pw_prebaked` / `secrets/pw_live` (gitignored, chmod 600) — they're
+resettable from the Supabase dashboard if lost.
+
+## Setup
+
+1. `cp .env.example .env` and fill in your own values — project refs, EC2 host, and
+   Grafana Cloud push credentials. Nothing is shared; the repo ships no credentials.
+2. Create `secrets/` and add your DB passwords (`pw_prebaked`, `pw_live`) and your EC2
+   key (`ec2_key.pem`), all `chmod 600`. The whole directory is gitignored.
+3. Seed the database: see **Schema + seed** below.
+4. Deploy the app to your EC2 host with `./deploy.sh`, which runs `app/deploy/bootstrap.sh`.
+5. Connect the project to Grafana Cloud from the Supabase dashboard (**Connect to Grafana**).
+
+Required tooling: `psql` (libpq), Node 18+, an SSH key for the EC2 host, and a Grafana
+Cloud stack.
+
+## Connectivity
+
+Direct DB host is IPv6-only (won't resolve on the demo laptop). Use the **pooler**:
+`aws-0-us-east-1.pooler.supabase.com:5432`, user `postgres.<ref>`, db `postgres`.
+`psql` via libpq: `/opt/homebrew/opt/libpq/bin/psql`.
+
+## The scenario: resource cascade
+
+Dataset: `shop` schema (customers 20k, products 2k, orders 500k, order_items 1.25M, events; ~207 MB).
+`orders.status` is **intentionally un-indexed**. A reporting query filtering on `status`
+(joined to order_items) forces full seq scans; run under concurrency on the nano instance it
+saturates CPU/IO → query latency climbs → connections pile up. **Remediation = add the index.**
+
+**Validated 2026-07-23:** solo fault query ~0.35 s → ~4.5 s under 12 workers (~14×), active
+connections 1→14. The Supabase **pooler session pool caps at 15 connections**, so defaults are
+`M_FAULT=12` / `N_BASELINE=2` (keep `N_BASELINE + M_FAULT + 1 ≤ 15`; higher counts trigger
+`EMAXCONNSESSION`).
+
+Why it favors Grafana over native Supabase dashboards: cross-signal correlation on one timeline,
+long retention, and alerting — all weak spots of the built-in siloed widgets.
+
+## Logs → Loki
+
+Gives the cascade a second signal on the same timeline, so you can walk from metrics into logs
+without leaving the dashboard — useful for live demos and for any agent that has to pivot from
+metrics to logs during an incident.
+
+`app/server.js` writes one JSON line per interesting request to stdout; systemd captures it and Alloy
+ships the journal to Loki. Volume is deliberately controlled: baseline load runs ~60 rps, so healthy
+requests are sampled 1-in-`LOG_SAMPLE_N` (default 50), while **all** 5xx and all requests slower than
+`LOG_SLOW_MS` (default 1000 ms) are always logged. `/metrics` and `/healthz` are excluded.
+
+A timed-out report query looks like this — `pg_code` `57014` is the signal that identifies it as a
+slow query rather than a connectivity fault:
+
+```json
+{"ts":"...","level":"error","msg":"request failed","method":"GET","route":"/report",
+ "status":500,"duration_ms":3004,"query":"report_revenue_by_batch",
+ "db_error":"canceling statement due to statement timeout","pg_code":"57014"}
+```
+
+Labels are kept low-cardinality (`job`, `instance`, `unit`, `level`, `route`); everything else stays a
+field. Useful queries:
+
+```logql
+{job="demoapp", level="error"} | json                      # the fault
+{job="demoapp", level="warn", route="/order"} | json        # blast radius: healthy route gone slow
+sum by (route) (count_over_time({job="demoapp", level="error"}[5m]))
+{job="demoapp"} | json | pg_code = "57014"                  # statement timeouts specifically
+```
+
+**Three new variables are required in `secrets/grafana_cloud_push.env`.** `bootstrap.sh` now fails
+loudly if any are missing, because `envsubst` would otherwise render a config that starts fine and
+silently pushes nothing:
+
+```
+GCLOUD_LOKI_URL=https://logs-prod-<region>.grafana.net/loki/api/v1/push
+GCLOUD_LOKI_USER=<stack instance id>
+GCLOUD_LOKI_PASS=<cloud access policy token>
+```
+
+Two host-level gotchas, both handled in `bootstrap.sh` but worth knowing if you debug by hand:
+
+- Alloy runs as its own user and **cannot read the journal** without being in the `systemd-journal`
+  group.
+- Alloy's config uses `stage.timestamp` to take the app's own `ts` field, so log and metric spikes
+  align exactly. Without it, ingestion time drifts and the correlation story falls apart.
+
+The Alloy config has **not** been syntax-validated — no `alloy` binary on the laptop. Run
+`alloy fmt /etc/alloy/config.alloy` on the host before relying on it.
+
+## Control script
+
+```bash
+./demo.sh status         [prebaked|live]   # connections + indexes + EXPLAIN of the fault query
+./demo.sh baseline       [prebaked|live]   # steady background load
+./demo.sh fault-start    [prebaked|live]   # trigger the cascade
+./demo.sh fault-stop     [prebaked|live]
+./demo.sh remediate      [prebaked|live]   # add index on orders(status) -> recovery
+./demo.sh unremediate    [prebaked|live]   # drop it again (restore fault hook)
+./demo.sh reset          [prebaked|live]   # stop workers, truncate events, drop index
+```
+Target defaults to `prebaked`. Tune load with `N_BASELINE` / `M_FAULT` env vars.
+
+## Rebuild schema from scratch
+
+```bash
+PGPASSWORD="$(cat secrets/pw_prebaked)" /opt/homebrew/opt/libpq/bin/psql \
+  -h aws-0-us-east-1.pooler.supabase.com -p 5432 -U "postgres.$SB_REF_PREBAKED" -d postgres \
+  -v ON_ERROR_STOP=1 -f schema_seed.sql
+```
+
+## Still to do
+
+- ~~Smoke-test the load/fault scripts~~ ✅ done — cascade confirmed (see Validated note above).
+- 1-click connect `grafana-demo-prebaked` to a Grafana stack (days ahead) + start baseline + intermittent fault for history.
+- Verify the provisioned Supabase dashboard + identify the panel that shows the cascade.
+- Create a Grafana alert on the condition; pre-fire it on prebaked.
+- Write the run-of-show; record a backup run.
+- Lock the T-minus checklist once the session date is set.

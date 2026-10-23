@@ -1,0 +1,17 @@
+[Unit]
+Description=Demo fix daemon (holds a dedicated DB connection so the fix always applies)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/demoapp
+Environment=FIXD_PORT=8081
+Environment=SECRETS_DIR=/opt/demoapp/secrets
+Environment=SB_TARGET=prebaked
+ExecStart=/usr/bin/node /opt/demoapp/fixd.js
+Restart=always
+RestartSec=2
+User=ec2-user
+
+[Install]
+WantedBy=multi-user.target

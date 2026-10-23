@@ -1,0 +1,22 @@
+{
+  "uid": null, "id": null, "title": "Demo App - Request Health",
+  "tags": ["supabase-demo","app"], "schemaVersion": 39, "refresh": "30s",
+  "time": {"from":"now-1h","to":"now"},
+  "panels": [
+    {"id":1,"type":"timeseries","title":"Request rate by route (req/s)","gridPos":{"h":8,"w":12,"x":0,"y":0},
+     "datasource":{"type":"prometheus","uid":"grafanacloud-prom"},"fieldConfig":{"defaults":{"unit":"reqps"}},
+     "targets":[{"refId":"A","datasource":{"type":"prometheus","uid":"grafanacloud-prom"},"expr":"sum by (route) (rate(demoapp_http_requests_total[$__rate_interval]))","legendFormat":"{{route}}"}]},
+    {"id":2,"type":"timeseries","title":"Latency p95 by route","gridPos":{"h":8,"w":12,"x":12,"y":0},
+     "datasource":{"type":"prometheus","uid":"grafanacloud-prom"},"fieldConfig":{"defaults":{"unit":"s"}},
+     "targets":[
+       {"refId":"A","datasource":{"type":"prometheus","uid":"grafanacloud-prom"},"expr":"histogram_quantile(0.95, sum by (le,route) (rate(demoapp_http_request_duration_seconds_bucket[$__rate_interval])))","legendFormat":"p95 {{route}}"},
+       {"refId":"B","datasource":{"type":"prometheus","uid":"grafanacloud-prom"},"expr":"histogram_quantile(0.50, sum by (le,route) (rate(demoapp_http_request_duration_seconds_bucket[$__rate_interval])))","legendFormat":"p50 {{route}}"}
+     ]},
+    {"id":3,"type":"timeseries","title":"Error rate (5xx/s)","gridPos":{"h":8,"w":12,"x":0,"y":8},
+     "datasource":{"type":"prometheus","uid":"grafanacloud-prom"},"fieldConfig":{"defaults":{"unit":"reqps"}},
+     "targets":[{"refId":"A","datasource":{"type":"prometheus","uid":"grafanacloud-prom"},"expr":"sum by (route) (rate(demoapp_http_errors_total[$__rate_interval]))","legendFormat":"5xx {{route}}"}]},
+    {"id":4,"type":"timeseries","title":"In-flight requests","gridPos":{"h":8,"w":12,"x":12,"y":8},
+     "datasource":{"type":"prometheus","uid":"grafanacloud-prom"},"fieldConfig":{"defaults":{"unit":"short"}},
+     "targets":[{"refId":"A","datasource":{"type":"prometheus","uid":"grafanacloud-prom"},"expr":"demoapp_http_inflight","legendFormat":"in-flight"}]}
+  ]
+}

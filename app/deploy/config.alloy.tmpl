@@ -1,0 +1,96 @@
+// Grafana Alloy: scrape the demo app (+ this host), ship its logs, and push both
+// to Grafana Cloud. Rendered by bootstrap.sh via envsubst from grafana_cloud_push.env.
+
+prometheus.exporter.unix "host" { }
+
+prometheus.scrape "app" {
+  targets = [
+    { "__address__" = "localhost:8080", "job" = "demoapp", "instance" = "ec2-demo" },
+  ]
+  forward_to      = [prometheus.remote_write.gc.receiver]
+  scrape_interval = "15s"
+}
+
+prometheus.scrape "node" {
+  targets         = prometheus.exporter.unix.host.targets
+  forward_to      = [prometheus.remote_write.gc.receiver]
+  scrape_interval = "15s"
+}
+
+prometheus.remote_write "gc" {
+  endpoint {
+    url = "${GCLOUD_PROM_URL}"
+    basic_auth {
+      username = "${GCLOUD_PROM_USER}"
+      password = "${GCLOUD_PROM_PASS}"
+    }
+  }
+}
+
+// ---- logs ----
+// The app logs one JSON line per interesting request to stdout, which systemd
+// captures in the journal. Alloy reads the journal, promotes a few fields to
+// labels, and pushes to Loki so the same incident is queryable in both LogQL and
+// PromQL on one timeline.
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+}
+
+loki.source.journal "host" {
+  forward_to    = [loki.process.demoapp.receiver]
+  relabel_rules = loki.relabel.journal.rules
+  labels        = { job = "demoapp", instance = "ec2-demo" }
+  max_age       = "12h"
+
+  // Without this, every unit on the box ships under job="demoapp" — systemd noise, IMDS
+  // polling, SELinux audit lines — so a LogQL query for the app returns mostly OS
+  // chatter. That is worse than useless for an agent: it burns context and invites a
+  // wrong turn. Restrict the journal read to the app's own unit.
+  matches = "_SYSTEMD_UNIT=demoapp.service"
+}
+
+loki.process "demoapp" {
+  forward_to = [loki.write.gc.receiver]
+
+  // Only the app emits JSON; systemd, loadgen, and Alloy's own lines pass through
+  // unparsed rather than silently producing empty labels.
+  stage.match {
+    selector = "{unit=\"demoapp.service\"}"
+
+    stage.json {
+      expressions = {
+        level  = "level",
+        route  = "route",
+        ts     = "ts",
+      }
+    }
+
+    // Keep labels low-cardinality: level and route only. status, duration_ms,
+    // pg_code, and query stay as fields, queryable via `| json`.
+    stage.labels {
+      values = { level = "", route = "" }
+    }
+
+    // Use the app's own timestamp so log and metric spikes line up exactly.
+    stage.timestamp {
+      source = "ts"
+      format = "RFC3339"
+    }
+  }
+}
+
+loki.write "gc" {
+  endpoint {
+    url = "${GCLOUD_LOKI_URL}"
+    basic_auth {
+      username = "${GCLOUD_LOKI_USER}"
+      password = "${GCLOUD_LOKI_PASS}"
+    }
+  }
+}

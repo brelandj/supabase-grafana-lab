@@ -1,0 +1,11 @@
+# Credentials - never commit
+secrets/
+.env
+*.pem
+*.key
+
+# Local state
+run/
+node_modules/
+*.log
+.DS_Store
