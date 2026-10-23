@@ -29,7 +29,7 @@ create table products (
 create table orders (
   id          bigint primary key,
   customer_id bigint not null references customers(id),
-  status      text not null,          -- << intentionally UN-indexed (the fault hook)
+  status      text not null,          -- un-indexed too, but not queried by the demo
   total       numeric(12,2) not null,
   note        text,
   created_at  timestamptz not null

@@ -29,7 +29,7 @@ Vars: `$job`, `$project` = `supabase_project_ref` (your project ref), `$supabase
 - `[321] Database size` (`pg_database_size_mb`) — ~207 MB confirms it's the prebaked project.
 
 ## Remediation beat
-`./demo.sh remediate prebaked` → `create index on orders(status)`. Then watch `[77] CPU Basic` drop, `[323] Client connections` drain, `[330] Query stats` total-time fall. Story closes.
+`./demo.sh remediate prebaked` → `create index on shop.order_items(batch)`. Then watch `[77] CPU Basic` drop, `[323] Client connections` drain, `[330] Query stats` total-time fall. Story closes.
 
 ## Don't-get-fooled notes
 - The **RAM Used gauge (~95%, red)** is NORMAL for Postgres (shared buffers/cache) — not the problem.
