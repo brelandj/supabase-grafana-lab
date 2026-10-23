@@ -2,7 +2,8 @@
 
 You will break a Supabase-backed app with a realistic fault, get paged by Grafana, and
 work the incident from the symptom down to the root cause and fix — using the Supabase
-integration dashboard, an app dashboard, Loki logs, and an alert, all on one timeline.
+integration dashboard, an app dashboard, the app's request logs in Loki, and an alert, all on
+one timeline.
 
 **Before you start:** every box in the README's *Ready-to-start checklist* is ticked, and you
 have these open in browser tabs:
@@ -118,9 +119,14 @@ Follow the symptom down a layer. On the **Supabase Project** dashboard (panel id
 > **Checkpoint:** you can say in one sentence what the DB dashboard adds that the app
 > dashboard couldn't tell you.
 
-### 3c. What exactly is failing? — Logs
+### 3c. What exactly is failing? — Application logs
 
-The metrics say *where* (the DB, via `/report`). The logs say *what*. In **Explore** (Loki):
+The metrics say *where* (the DB, via `/report`). The logs say *what*.
+
+These are the **demo app's own request logs**, not Supabase's — the integration provides
+database metrics, and the app on the EC2 host emits one JSON line per interesting request,
+which Alloy ships to Loki alongside the app's metrics. This is the same pivot you would make
+on any service you had instrumented yourself. In **Explore** (Loki):
 
 ```logql
 {job="demoapp", level="error"} | json
@@ -221,7 +227,7 @@ burstable and a drained CPU-credit balance makes the baseline look erratic.
 - An **alert** paged you on a database signal before any user reported a problem.
 - The **app dashboard** showed the user impact and the blast radius onto an unrelated route.
 - The **DB dashboard** showed the database was CPU-bound and up-but-struggling.
-- **Logs** named the query and the exact failure mode (`57014`, statement timeout).
+- The **app's logs** named the query and the exact failure mode (`57014`, statement timeout).
 - `EXPLAIN` gave the root cause: a sequential scan on an un-indexed, selective column.
 - One index fixed it, and the dashboards showed the recovery propagating layer by layer.
 

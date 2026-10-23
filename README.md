@@ -60,14 +60,19 @@ connections 1→14. The Supabase **pooler session pool caps at 15 connections**,
 `EMAXCONNSESSION`).
 
 What the lab exercises: the Supabase integration dashboard for database metrics, a small app
-dashboard for the user-facing symptoms, Loki for the request logs, and an alert — all on one
-timeline, so you can walk the incident from symptom to root cause.
+dashboard for the user-facing symptoms, the app's own request logs in Loki, and an alert — all
+on one timeline, so you can walk the incident from symptom to root cause.
 
-## Logs → Loki
+## Application logs → Loki
 
-Gives the cascade a second signal on the same timeline, so you can walk from metrics into logs
-without leaving the dashboard — the pivot you make in LAB.md once the metrics tell you *where*
-the problem is but not *what* it is.
+**Where these come from:** the Supabase integration delivers database *metrics*. The logs in
+this lab are the demo app's own request logs, emitted on the EC2 host and shipped to Loki by
+the same Alloy agent that scrapes the app's metrics — i.e. the way you would instrument your
+own service. They are not Supabase's Postgres logs.
+
+They give the cascade a second signal on the same timeline, so you can walk from metrics into
+logs without leaving the dashboard — the pivot you make in LAB.md once the metrics tell you
+*where* the problem is but not *what* it is.
 
 `app/server.js` writes one JSON line per interesting request to stdout; systemd captures it and Alloy
 ships the journal to Loki. Volume is deliberately controlled: baseline load runs ~60 rps, so healthy
