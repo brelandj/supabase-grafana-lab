@@ -101,21 +101,25 @@ Two host-level gotchas, both handled in `bootstrap.sh` but worth knowing if you 
 - Alloy's config uses `stage.timestamp` to take the app's own `ts` field, so log and metric spikes
   align exactly. Without it, ingestion time drifts and the correlation story falls apart.
 
-The Alloy config has **not** been syntax-validated — no `alloy` binary on the laptop. Run
-`alloy fmt /etc/alloy/config.alloy` on the host before relying on it.
+`app/deploy/config.alloy.tmpl` is kept in `alloy fmt` canonical form and passes `alloy validate`
+(checked against Alloy v1.21.2 with placeholder credentials). If you edit it, re-run both on a
+rendered copy before deploying.
 
 ## Control script
 
 ```bash
-./demo.sh status         [prebaked|live]   # connections + indexes + EXPLAIN of the fault query
-./demo.sh baseline       [prebaked|live]   # steady background load
-./demo.sh fault-start    [prebaked|live]   # trigger the cascade
-./demo.sh fault-stop     [prebaked|live]
-./demo.sh remediate      [prebaked|live]   # add index on order_items(batch) -> recovery
-./demo.sh unremediate    [prebaked|live]   # drop it again (restore fault hook)
-./demo.sh reset          [prebaked|live]   # stop workers, truncate events, drop index
+# The demo path: fault driven THROUGH the app on EC2 (what RUNOFSHOW.md uses)
+./demo.sh fixd-start                        # arm: hold the connection the fix will need
+./demo.sh app-fault-start                   # trigger the cascade (~5 min before you present)
+./demo.sh remediate      [prebaked|live]    # THE FIX: add index on order_items(batch) -> recovery
+./demo.sh app-fault-stop
+./demo.sh unremediate    [prebaked|live]    # drop the index again (re-arm for another run)
+./demo.sh status         [prebaked|live]    # connections + indexes + EXPLAIN of the fault query
+
+# Direct-to-DB workers from your laptop (bypass the app; handy for testing the schema)
+./demo.sh baseline | baseline-stop | fault-start | fault-stop | reset   [prebaked|live]
 ```
-Target defaults to `prebaked`. Tune load with `N_BASELINE` / `M_FAULT` env vars.
+Target defaults to `prebaked`. `./demo.sh help` lists every command and env override.
 
 ## Rebuild schema from scratch
 
@@ -125,11 +129,15 @@ PGPASSWORD="$(cat secrets/pw_prebaked)" /opt/homebrew/opt/libpq/bin/psql \
   -v ON_ERROR_STOP=1 -f schema_seed.sql
 ```
 
-## Still to do
+## Pre-session checklist
 
-- ~~Smoke-test the load/fault scripts~~ ✅ done — cascade confirmed (see Validated note above).
-- 1-click connect `grafana-demo-prebaked` to a Grafana stack (days ahead) + start baseline + intermittent fault for history.
-- Verify the provisioned Supabase dashboard + identify the panel that shows the cascade.
-- Create a Grafana alert on the condition; pre-fire it on prebaked.
-- Write the run-of-show; record a backup run.
-- Lock the T-minus checklist once the session date is set.
+Work through these in order, ideally a day or two ahead so the prebaked project has history:
+
+- [ ] Both Supabase projects created; `.env` and `secrets/` filled in (see **Setup**).
+- [ ] Schema seeded on the prebaked project (`./demo.sh status` shows a `Seq Scan` plan and no `idx_oi_batch`).
+- [ ] EC2 host deployed (`./deploy.sh`); `demoapp`, `fixd`, `alloy` all `active`; `{job="demoapp"}` returns logs in Explore.
+- [ ] Prebaked project connected to your Grafana stack via **Connect to Grafana**; the Supabase integration dashboard shows CPU / connections for it.
+- [ ] `app-dashboard.json` imported; the four app panels show the baseline load.
+- [ ] Alert created on CPU busy ≥ 85% (see RUNOFSHOW.md); fire it once with a rehearsal fault so you know the lead time on your instance.
+- [ ] Panel map in PANELS.md checked against what the integration actually provisioned in your stack (panel ids can shift between integration versions).
+- [ ] One full rehearsal of RUNOFSHOW.md, then `unremediate` + `app-fault-stop` and let the burstable instances recover CPU credits before the real run.
