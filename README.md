@@ -127,7 +127,11 @@ rendered copy before deploying.
 ./demo.sh status         [prebaked|live]    # connections + indexes + EXPLAIN of the fault query
 
 # Direct-to-DB workers from your laptop (bypass the app; handy for testing the schema)
-./demo.sh baseline | baseline-stop | fault-start | fault-stop | reset   [prebaked|live]
+./demo.sh baseline      [prebaked|live]
+./demo.sh baseline-stop [prebaked|live]
+./demo.sh fault-start   [prebaked|live]
+./demo.sh fault-stop    [prebaked|live]
+./demo.sh reset         [prebaked|live]
 ```
 Target defaults to `prebaked`. `./demo.sh help` lists every command and env override.
 

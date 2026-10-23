@@ -78,7 +78,7 @@ if [[ -f "$ENV_FILE" ]]; then
 else
   for v in "${PUSH_VARS[@]}"; do
     [[ -n "${!v:-}" ]] || { echo "ERROR: $v not set. Fill it in .env or create $ENV_FILE" >&2; exit 1; }
-    case "${!v}" in *your_*|*XX*) echo "ERROR: $v still has the placeholder from .env.example" >&2; exit 1 ;; esac
+    case "${!v}" in *your_prebaked_project_ref*|*your_live_project_ref*|*your_grafana_cloud_access_policy_token*|*prometheus-prod-XX-prod-REGION*|*logs-prod-XXX.grafana.net*) echo "ERROR: $v still has the placeholder from .env.example" >&2; exit 1 ;; esac
   done
   ENV_FILE="$(mktemp)"; TMPFILES+=("$ENV_FILE")
   for v in "${PUSH_VARS[@]}"; do printf '%s=%s\n' "$v" "${!v}"; done > "$ENV_FILE"

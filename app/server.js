@@ -61,7 +61,7 @@ const INIT_ERROR_ROUTES = (process.env.INIT_ERROR_ROUTES || '/report,/order')
 INIT_ERROR_ROUTES.forEach((route) => httpErrors.inc({ route }, 0));
 
 // ---- structured logs (stdout -> journal -> Loki) ----
-// Baseline load runs ~60 rps on /order, so logging every request would bury the
+// Baseline load runs ~20 rps on /order, so logging every request would bury the
 // fault signal in noise and burn log quota. 5xx and slow requests are always
 // emitted; healthy ones are sampled just often enough to prove the pipeline works.
 const LOG_SAMPLE_N = Number(process.env.LOG_SAMPLE_N || 50);
