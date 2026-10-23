@@ -6,17 +6,17 @@ Vars: `$job`, `$project` = `supabase_project_ref` (your project ref), `$supabase
 Panel ids are from the integration dashboard at the time of writing; they can shift between
 integration versions, so match on panel *title* if an id is missing.
 
-## The cascade, in the order to click through
+## The cascade, in the order to look at it
 
-**1. Root cause — CPU pegs**
-- `[77] CPU Basic` (timeseries) — `rate(node_cpu_seconds_total{mode="system|user|iowait",...})*100`. **Headline** — climbs to ~100% under the fault.
-- `[20] CPU Busy` (gauge) — `clamp_min(100 - avg(rate(node_cpu_seconds_total{mode="idle"}))*100,0)`. At-a-glance opener.
+**1. The symptom that pages you — CPU pegs**
+- `[77] CPU Basic` (timeseries) — `rate(node_cpu_seconds_total{mode="system|user|iowait",...})*100`. Climbs to ~100% under the fault.
+- `[20] CPU Busy` (gauge) — `clamp_min(100 - avg(rate(node_cpu_seconds_total{mode="idle"}))*100,0)`. Same signal at a glance; the LAB.md alert uses this expression.
 
 **2. Connection pile-up**
 - `[323] Client connections` (timeseries):
-  - `pg_stat_database_num_backends` → **"postgres connections"** — climbs toward the pool ceiling (~15).
+  - `pg_stat_database_num_backends` → **"postgres connections"** — climbs toward the connection ceiling.
   - `sum(supavisor_connections_active)` / `pgbouncer_used_clients` → pooler activity / clients waiting = queuing.
-  - **This is the money panel for "connections piling up."**
+  - The clearest view of connections piling up behind slow queries.
 
 **3. Query impact**
 - `[330] Query stats` (timeseries):
@@ -31,9 +31,9 @@ integration versions, so match on panel *title* if an id is missing.
 - `[319] Postgres status` (`pg_up`), `[341] pgbouncer status` (`pgbouncer_up`), `[324] DB Mode` (ReadWrite), `[325] In Recovery` (No), `[307] OOM Killer` (flat — CPU-bound, not memory).
 - `[321] Database size` (`pg_database_size_mb`) — ~207 MB confirms the seeded dataset is in place.
 
-## Remediation beat
-`./demo.sh remediate prebaked` → `create index on shop.order_items(batch)`. Then watch `[77] CPU Basic` drop, `[323] Client connections` drain, `[330] Query stats` total-time fall. Story closes.
+## After the fix
+`./demo.sh remediate` → `create index on shop.order_items(batch)`. Then watch `[77] CPU Basic` drop, `[323] Client connections` drain, and `[330] Query stats` total time fall — a few minutes behind the app dashboard.
 
 ## Don't-get-fooled notes
 - The **RAM Used gauge (~95%, red)** is NORMAL for Postgres (shared buffers/cache) — not the problem.
-- Connection numbers cap ~15 (pooler session `pool_size`); push `M_FAULT` past ~14 and you also get `EMAXCONNSESSION` (a real connection-exhaustion error you can show as an aside).
+- If you drive load with the laptop workers instead of the app, the pooler session `pool_size` caps you at ~15; push `M_FAULT` past ~14 and you get `EMAXCONNSESSION`, a genuine connection-exhaustion error but a different incident.

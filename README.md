@@ -54,10 +54,9 @@ Dataset: `shop` schema (customers 20k, products 2k, orders 500k, order_items 1.2
 instance it saturates CPU/IO → query latency climbs → connections pile up.
 **Remediation = `create index on shop.order_items(batch)`.**
 
-**Validated 2026-07-23:** solo fault query ~0.35 s → ~4.5 s under 12 workers (~14×), active
-connections 1→14. The Supabase **pooler session pool caps at 15 connections**, so defaults are
-`M_FAULT=12` / `N_BASELINE=2` (keep `N_BASELINE + M_FAULT + 1 ≤ 15`; higher counts trigger
-`EMAXCONNSESSION`).
+If you use the direct-to-DB workers from your laptop (`./demo.sh fault-start`), note that the
+Supabase **pooler session pool caps at 15 connections**, so the defaults are `M_FAULT=12` /
+`N_BASELINE=2` (keep `N_BASELINE + M_FAULT + 1 ≤ 15`; higher counts trigger `EMAXCONNSESSION`).
 
 What the lab exercises: the Supabase integration dashboard for database metrics, a small app
 dashboard for the user-facing symptoms, the app's own request logs in Loki, and an alert — all
@@ -75,7 +74,7 @@ logs without leaving the dashboard — the pivot you make in LAB.md once the met
 *where* the problem is but not *what* it is.
 
 `app/server.js` writes one JSON line per interesting request to stdout; systemd captures it and Alloy
-ships the journal to Loki. Volume is deliberately controlled: baseline load runs ~60 rps, so healthy
+ships the journal to Loki. Volume is deliberately controlled: baseline load runs ~20 rps, so healthy
 requests are sampled 1-in-`LOG_SAMPLE_N` (default 50), while **all** 5xx and all requests slower than
 `LOG_SLOW_MS` (default 1000 ms) are always logged. `/metrics` and `/healthz` are excluded.
 

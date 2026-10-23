@@ -108,8 +108,8 @@ Follow the symptom down a layer. On the **Supabase Project** dashboard (panel id
 `PANELS.md`):
 
 - **CPU Basic / CPU Busy** — pegged near 100%. This is what paged you.
-- **Client connections** — `pg_stat_database_num_backends` climbing toward the pooler's
-  session cap (~15). Connections are piling up *because* queries are slow, not the reverse.
+- **Client connections** — `pg_stat_database_num_backends` climbing toward the project's
+  connection ceiling. Connections are piling up *because* queries are slow, not the reverse.
 - **Query stats** — `pg_stat_statements_total_time_seconds` rate rising sharply: total query
   time is climbing while query *count* barely moved. Each query got much more expensive.
 - **Disk IOps** — reads up, from sequential scans.
